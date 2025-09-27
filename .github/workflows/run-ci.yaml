@@ -32,6 +32,6 @@ jobs:
         uses: appleboy/telegram-action@master
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
-          file_path: android/app/build/outputs/apk/release/app-release.apk
-          caption: 'Android Release APK with version ${GITHUB_REF_NAME}'
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          document: android/app/build/outputs/apk/release/app-release.apk
+          message: 'Android Release APK with version ${GITHUB_REF_NAME}'
