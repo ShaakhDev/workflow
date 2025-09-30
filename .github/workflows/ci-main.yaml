@@ -2,10 +2,32 @@ name: React Native CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'docs/**'
   pull_request:
-    branches: [main, develop]
-
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      buildType:
+        type: choice
+        description: 'Build type to run'
+        options:
+          - prod-apk
+          - prod-aab
+          - ios-prod
+          - publish-stores
+          - all
+      platform:
+        type: choice
+        description: 'Platform to build'
+        default: 'all'
+        options:
+          - android
+          - ios
+          - all
 jobs:
   build-android:
     runs-on: ubuntu-latest
