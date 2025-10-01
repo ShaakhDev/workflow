@@ -149,6 +149,7 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: '36.0.0'
       - name: Upload Artifact
+        id: upload_artifact
         uses: actions/upload-artifact@v4
         with:
           name: Signed APK
@@ -165,7 +166,7 @@ jobs:
 
             Repository: ${{ github.repository }}
 
-            Download: ${{ steps.sign_app.outputs.signedReleaseFile }}
+            Download: ${{ steps.upload_artifact.outputs.artifact-url }}
 
       # TODO: Uncomment this when the Play Store is ready
 
