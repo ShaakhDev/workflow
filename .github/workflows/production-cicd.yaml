@@ -1,0 +1,173 @@
+name: React Native CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'docs/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      buildType:
+        type: choice
+        description: 'Build type to run'
+        options:
+          - prod-apk
+          - prod-aab
+          - ios-prod
+          - publish-stores
+          - all
+      platform:
+        type: choice
+        description: 'Platform to build'
+        default: 'all'
+        options:
+          - android
+          - ios
+          - all
+jobs:
+  check-skip:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - name: Skip CI check
+        run: echo "Proceeding with workflow"
+  test:
+    needs: check-skip
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Get npm cache directory path
+        id: npm-cache-dir-path
+        run: echo "dir=$(npm cache dir)" >> $GITHUB_OUTPUT
+
+      - name: 📦 Setup npm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.npm-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: 📦 Install dependencies
+        run: npm install
+
+      - name: 🧹 Run ESLint
+        run: npm run lint
+  build-and-deploy:
+    needs: test
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    # strategy:
+    #   matrix:
+    #     platform: [android]
+    #     include:
+    #       - platform: ios
+    #         runs-on: macos-latest
+    # runs-on: ${{ matrix.platform == 'ios' && 'macos-latest' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # - name: 📦 Install yarn
+      #   run: npm install -g yarn
+
+      - name: 📦 Get npm cache directory path
+        id: npm-cache-dir-path
+        run: echo "dir=$(npm cache dir)" >> $GITHUB_OUTPUT
+
+      - name: 📦 Setup npm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.npm-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: 📦 Install dependencies
+        run: npm install
+
+      - name: Increment versionCode
+        id: increment_version
+        run: |
+          # Extract the current versionCode from build.gradle
+          current_version_code=$(grep 'versionCode' android/app/build.gradle | awk -F ' ' '{print $2}')
+
+          # Increment the versionCode by 1
+          new_version_code=$((current_version_code + 1))
+
+          # Update the build.gradle file with the new versionCode
+          sed -i "s/versionCode ${current_version_code}/versionCode ${new_version_code}/" android/app/build.gradle
+
+          echo "NEW_VERSION_CODE=${new_version_code}" >> ${GITHUB_OUTPUT}
+
+      - name: Cache Gradle Wrapper
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-caches-
+      # Start the build process
+      - name: Make Gradlew Executable
+        run: cd android && chmod +x ./gradlew
+
+      - name: Build Android App Bundle
+        run: cd android && ./gradlew bundleRelease --no-daemon
+
+      - name: Sign App Bundle
+        id: sign_app
+        uses: r0adkll/sign-android-release@v1
+        # with:
+        #   releaseDirectory: android/app/build/outputs/bundle/release
+        #   signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
+        #   alias: ${{ secrets.ANDROID_SIGNING_ALIAS }}
+        #   keyStorePassword: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+        #   keyPassword: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        with:
+          releaseDirectory: android/app/build/outputs/bundle/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Signed App Bundle
+          path: ${{steps.sign_app.outputs.signedReleaseFile}}
+
+      # TODO: Uncomment this when the Play Store is ready
+
+      # - name: Deploy to Play Store (Production)
+      #   uses: r0adkll/upload-google-play@v1
+      #   with:
+      #     serviceAccountJsonPlainText: ${{ secrets.ANDROID_SERVICE_ACCOUNT }}
+      #     packageName: com.thebest.gamchha
+      #     releaseFiles: ${{steps.sign_app.outputs.signedReleaseFile}}
+      #     track: production
+      #     status: draft
+      #     inAppUpdatePriority: 3
+      #     whatsNewDirectory: android/release-notes/
+      #     releaseName: v1.0.0.p
