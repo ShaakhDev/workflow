@@ -153,10 +153,11 @@ jobs:
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Signed App Bundle
           path: ${{steps.sign_app.outputs.signedReleaseFile}}
+          overwrite: true
 
       # TODO: Uncomment this when the Play Store is ready
 
